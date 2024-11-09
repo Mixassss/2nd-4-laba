@@ -5,6 +5,9 @@
 #include <chrono>
 #include <random>
 #include <semaphore>
+#include <condition_variable>
+#include <atomic>
+#include <vector>
 
 using namespace std;
 
@@ -13,6 +16,10 @@ const int char_count = 5; // Кол-во символов, которое ген
 
 mutex mtx;
 counting_semaphore<1> sem(1);
+mutex slim_mtx;
+condition_variable slim_cv;
+int slim_count = 0;
+const int slim_limit = 1; // Ограничение семафора slim
 barrier<> my_barrier(thread_count);
 
 void generateRandomCharsMutex(int thread_id) {
@@ -40,6 +47,33 @@ void generateRandomCharsSemaphore(int thread_id) {
     }
 }
 
+void acquireSlim() {
+    unique_lock<mutex> lock(slim_mtx);
+    while (slim_count >= slim_limit) {
+        slim_cv.wait(lock);
+    }
+    ++slim_count; // Увеличиваем счетчик
+}
+
+void realeseSlim() {
+    unique_lock<mutex> lock(slim_mtx);
+    --slim_count; // Уменьшаем счетчик
+    slim_cv.notify_one(); // Уведомляем один поток
+}
+
+void generateRandomCharsSemaphoreSlim(int thread_id) {
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(32, 126);
+
+    for (int i = 0; i < char_count; ++i) {
+        acquireSlim();
+        char random_char = dis(gen);
+        cout << "SemaphoreSlim thread " << thread_id << ": " << random_char << endl;
+        realeseSlim();
+    }
+}
+
 void generateRandomCharsBarrier(int thread_id) {
     random_device rd;
     mt19937 gen(rd());
@@ -52,22 +86,49 @@ void generateRandomCharsBarrier(int thread_id) {
     }
 }
 
+void generateRandomCharsSpinLock(int thread_id) {
+
+}
+
 int main() {
-    // Запуск потоков с mutex
+    vector<thread> threads;
+
+    // Потоки с использованием mutex
     for (int i = 0; i < thread_count; ++i) {
-        thread t(generateRandomCharsMutex, i);
-        t.join();
+        threads.emplace_back(generateRandomCharsMutex, i);
     }
 
-    // Запуск потоков с semaphore
-    for (int i = 0; i < thread_count; ++i) {
-        thread t(generateRandomCharsSemaphore, i);
+    for (auto& t : threads) {
         t.join();
     }
+    threads.clear();
 
-    // Запуск потоков с barrier
+    // Потоки с использованием semaphore
     for (int i = 0; i < thread_count; ++i) {
-        thread t(generateRandomCharsBarrier, i);
+        threads.emplace_back(generateRandomCharsSemaphore, i);
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+    threads.clear();
+
+    // Потоки с использованием semaphore slim
+    for (int i = 0; i < thread_count; ++i) {
+        threads.emplace_back(generateRandomCharsSemaphoreSlim, i);
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+    threads.clear();
+
+    // Потоки с использованием barrier
+    for (int i = 0; i < thread_count; ++i) {
+        threads.emplace_back(generateRandomCharsBarrier, i);
+    }
+    
+    for (auto& t : threads) {
         t.join();
     }
 
