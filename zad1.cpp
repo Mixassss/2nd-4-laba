@@ -20,6 +20,20 @@ condition_variable slim_cv;
 barrier my_barrier(thread_count);
 atomic_flag spinlock = ATOMIC_FLAG_INIT;
 
+class StopWatch {
+    chrono::time_point<chrono::steady_clock> start_time;
+public:
+    void start() {
+        start_time = chrono::steady_clock::now();
+    }
+
+    double elapsed() {
+        auto end_time = chrono::steady_clock::now();
+        chrono::duration<double> duration = end_time - start_time;
+        return duration.count();
+    }
+};
+
 class SemaphoreSlim {
     atomic<int> count;
     mutex mtx;
@@ -156,8 +170,11 @@ void generateRandomCharsMonitor(int thread_id) {
 
 int main() {
     thread threads[thread_count];
+    StopWatch stopwatch;
+    double time_taken;
 
     // Потоки с использованием mutex
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] = thread(generateRandomCharsMutex, i);
     }
@@ -165,8 +182,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by Mutex threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием semaphore
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsSemaphore, i);
     }
@@ -174,8 +194,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by Semaphore threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием semaphore slim
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsSemaphoreSlim, i);
     }
@@ -183,8 +206,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by SemaphoreSlim threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием barrier
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsBarrier, i);
     }
@@ -192,8 +218,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by Barrier threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием spinlock
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsSpinLock, i);
     }
@@ -201,8 +230,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by SpinLock threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием spinwait
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsSpinWait, i);
     }
@@ -210,8 +242,11 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by SpinWait threads: " << time_taken << " seconds" << endl;
 
     // Потоки с использованием monitor
+    stopwatch.start();
     for (int i = 0; i < thread_count; ++i) {
         threads[i] =  thread(generateRandomCharsMonitor, i);
     }
@@ -219,6 +254,8 @@ int main() {
     for (int i = 0; i < thread_count; ++i) {
         threads[i].join();
     }
+    time_taken = stopwatch.elapsed();
+    cout << "Time taken by Monitor threads: " << time_taken << " seconds" << endl;
 
     return 0;
 }
