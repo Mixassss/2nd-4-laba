@@ -12,9 +12,8 @@ public:
     int max_need;
     int allocated;
     int need;
-    int initial_money;
 
-    Friend(string n, int max_n, int alloc, int init) : name(n), max_need(max_n), allocated(alloc), initial_money(init) {
+    Friend(string n, int max_n, int alloc) : name(n), max_need(max_n), allocated(alloc) {
         need = max_need - allocated;
     }
 };
@@ -41,32 +40,30 @@ public:
         }
     }
 
-    void requestResources(Friend &f, int request) {
+    void requestResources(int index, int request) {
         lock_guard<mutex> lock(mtx);
         
-        cout << f.name << " запрашивает " << request << " долларов.\n";
+        Friend& f = *friends[index];
+        cout << f.name << " запрашивает " << request << " рублей.\n";
 
         if (request <= available && request <= f.need) {
             available -= request;
             f.allocated += request;
             f.need -= request;
-            cout << f.name << " получил " << request << " долларов.\n";
-
-            this_thread::sleep_for(chrono::seconds(1));
+            cout << f.name << " получил " << request << " рублей.\n";
             checkSafeState(f);
         } else {
-            cout << f.name << " не может получить " << request << " долларов. Недостаточно ресурсов.\n";
+            cout << f.name << " не может получить " << request << " рублей. Недостаточно ресурсов.\n";
         }
     }
 
     void checkSafeState(Friend &f) {
+        // Проверка на безопасное состояние
         int total_allocated = 0;
+        int total_needed = 0;
+
         for (int i = 0; i < friend_count; i++) {
             total_allocated += friends[i]->allocated;
-        }
-        
-        int total_needed = 0;
-        for (int i = 0; i < friend_count; i++) {
             total_needed += friends[i]->need;
         }
 
@@ -99,42 +96,47 @@ int main() {
     cout << "Введите начальное количество средств в банке: ";
     cin >> initial_money;
 
-    int friend_count;
-    cout << "Введите количество друзей: ";
-    cin >> friend_count;
-
+    int friend_count = 3;
     Bank bank(initial_money, friend_count);
-    
-    string name;
-    int max_need, alloc, init;
-    for (int i = 0; i < friend_count; ++i) {
-        cout << "Введите имя друга, максимальную потребность, выделенные средства и начальные деньги (через пробел): ";
-        cin >> name >> max_need >> alloc >> init;
-        Friend* friendEntity = new Friend(name, max_need, alloc, init);
-        bank.addFriend(i, friendEntity);
-    }
+
+    // Инициализация друзей с их максимальными потребностями и выделенными средствами
+    bank.addFriend(0, new Friend("Миша", 8, 6));
+    bank.addFriend(1, new Friend("Вадим", 13, 8));
+    bank.addFriend(2, new Friend("Влад", 10, 7));
 
     // Изначальное распределение средств
     cout << "\nИзначальное распределение средств:\n";
     for (int i = 0; i < friend_count; ++i) {
         Friend* f = bank.getFriend(i);
         if (f) {
-            cout << f->name << " начальные средства: " << f->initial_money << " долларов.\n";
+            cout << f->name << " начальные средства: " << f->allocated << " рублей.\n";
         }
     }
 
-    thread t1(&Bank::requestResources, &bank, ref(*bank.getFriend(0)), 6); 
-    thread t2(&Bank::requestResources, &bank, ref(*bank.getFriend(1)), 8);     
-    thread t3(&Bank::requestResources, &bank, ref(*bank.getFriend(2)), 7);   
+    // Проверить общую сумму выделенных средств
+    int total_allocated = 0;
+    for (int i = 0; i < friend_count; ++i) {
+        total_allocated += bank.getFriend(i)->allocated;
+    }
+    
+    if (total_allocated > initial_money) {
+        cout << "Ошибка: выделенные средства превышают начальные средства в банке!" << endl;
+        return -1; // Завершить программу с ошибкой
+    }
+
+    // Запрос ресурсов
+    int request;
+    for (int i = 0; i < friend_count; i++) {
+        cout << "Введите запрашиваемую сумму для " << bank.getFriend(i)->name << ": ";
+        cin >> request;
+        thread t(&Bank::requestResources, &bank, i, request);
+        t.join();
+    }
 
     // Проверка на тупиковую ситуацию
     if (bank.isDeadlock()) {
         cout << "Система находится в тупиковой ситуации!\n";
     }
-
-    t1.join();
-    t2.join();
-    t3.join();
 
     for (int i = 0; i < friend_count; ++i) {
         delete bank.getFriend(i);
