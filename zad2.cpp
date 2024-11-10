@@ -1,91 +1,70 @@
-#include <iostream>
-#include <thread>
-#include <chrono>
-#include <mutex>
-#include <iomanip>
+#include "zad2.h"
 
-using namespace std;
+BirthData::BirthData(size_t size) : size(size) { // Конструктор, выделяющий память для массива родов
+    births = new Birth[size];
+}
 
-// Структура для хранения данных о родах
-struct Birth {
-    string motherFIO;
-    string birthMother; // Дата рождения матери
-    string birthChild; // Дата рождения ребенка
-};
+BirthData::~BirthData() { // Деструктор, освобождающий выделенную память
+    delete[] births;
+}
 
-// Класс для обработки данных о родах
-class BirthData {
-public:
-    Birth *births;
-    size_t size;
-
-    BirthData(size_t size) : size(size) { // Конструктор, выделяющий память для массива родов
-        births = new Birth[size];
+// Метод для генерации данных о родах
+void BirthData::generateData(size_t numEntries) {
+    for (size_t i = 0; i < numEntries; ++i) {
+        births[i].motherFIO = "Mother" + to_string(i);
+        cout << "Введите дату рождения матери для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
+        cin >> births[i].birthMother;
+        cout << "Введите дату рождения ребенка для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
+        cin >> births[i].birthChild;
     }
+}
 
-    ~BirthData() { // Деструктор, освобождающий выделенную память
-        delete[] births;
+// Метод для разбора даты и извлечения года, месяца и дня
+void BirthData::parseDate(const string& date, int& year, int& month, int& day) {
+    year = stoi(date.substr(0, 4)); // Извлечение года
+    month = stoi(date.substr(5, 2)); // Извлечение месяца
+    day = stoi(date.substr(8, 2)); // Извлечение дня
+    if (month < 1 || month > 12) {
+        throw invalid_argument("Месяц должен быть от 1 до 12.");
     }
+    if (year > 2024) {
+        throw invalid_argument("Год должен быть не больше 2024.");
+    }
+}
 
-    // Метод для генерации данных о родах
-    void generateData(size_t numEntries) {
-        for (size_t i = 0; i < numEntries; ++i) {
-            births[i].motherFIO = "Mother" + to_string(i);
-            cout << "Введите дату рождения матери для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
-            cin >> births[i].birthMother;
-            cout << "Введите дату рождения ребенка для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
-            cin >> births[i].birthChild;
+// Метод проверки, находится ли дата в заданном диапазоне
+bool BirthData::DateRange(const string& date, const string& fromDate, const string& toDate) {
+    int year, month, day;
+    int fromYear, fromMonth, fromDay;
+    int toYear, toMonth, toDay;
+    parseDate(date, year, month, day);
+    parseDate(fromDate, fromYear, fromMonth, fromDay);
+    parseDate(toDate, toYear, toMonth, toDay);
+
+    return (year > fromYear || (year == fromYear && 
+            (month > fromMonth || (month == fromMonth && day >= fromDay)))) &&
+            (year < toYear || (year == toYear && 
+            (month < toMonth || (month == toMonth && day <= toDay))));
+}
+
+// Метод вычисления среднего возраста матерей в заданном диапазоне дат
+double BirthData::calculateAverageAge(const string& fromDate, const string& toDate, size_t start, size_t end) {
+    int totalAge = 0; // Сумма возрастов
+    int count = 0; // Счетчик подходящих записей
+
+    for (size_t i = start; i < end; ++i) { // Если дата рождения матери попадает в диапазон
+        if (DateRange(births[i].birthMother, fromDate, toDate)) {
+            totalAge += getAge(births[i].birthMother); // Добавляем возраст
+            count++;
         }
     }
+    return (count > 0) ? static_cast<double>(totalAge) / count : 0.0; // Возврат среднего возраста
+}
 
-    // Метод для разбора даты и извлечения года, месяца и дня
-    void parseDate(const string& date, int& year, int& month, int& day) {
-        year = stoi(date.substr(0, 4)); // Извлечение года
-        month = stoi(date.substr(5, 2)); // Извлечение месяца
-        day = stoi(date.substr(8, 2)); // Извлечение дня
-        if (month < 1 || month > 12) {
-            throw invalid_argument("Месяц должен быть от 1 до 12.");
-        }
-        if (year > 2024) {
-            throw invalid_argument("Год должен быть не больше 2024.");
-        }
-    }
-
-    // Метод проверки, находится ли дата в заданном диапазоне
-    bool DateRange(const string& date, const string& fromDate, const string& toDate) {
-        int year, month, day;
-        int fromYear, fromMonth, fromDay;
-        int toYear, toMonth, toDay;
-        parseDate(date, year, month, day);
-        parseDate(fromDate, fromYear, fromMonth, fromDay);
-        parseDate(toDate, toYear, toMonth, toDay);
-
-        return (year > fromYear || (year == fromYear && 
-                (month > fromMonth || (month == fromMonth && day >= fromDay)))) &&
-               (year < toYear || (year == toYear && 
-                (month < toMonth || (month == toMonth && day <= toDay))));
-    }
-
-    // Метод вычисления среднего возраста матерей в заданном диапазоне дат
-    double calculateAverageAge(const string& fromDate, const string& toDate, size_t start, size_t end) {
-        int totalAge = 0; // Сумма возрастов
-        int count = 0; // Счетчик подходящих записей
-
-        for (size_t i = start; i < end; ++i) { // Если дата рождения матери попадает в диапазон
-            if (DateRange(births[i].birthMother, fromDate, toDate)) {
-                totalAge += getAge(births[i].birthMother); // Добавляем возраст
-                count++;
-            }
-        }
-        return (count > 0) ? static_cast<double>(totalAge) / count : 0.0; // Возврат среднего возраста
-    }
-
-private:
-    int getAge(const string& birthDate) { // Метод для вычисления возраста по дате рождения
-        int year = stoi(birthDate.substr(0, 4));
-        return 2024 - year;  // Логика возраста на 2024 год
-    }
-};
+int BirthData::getAge(const string& birthDate) { // Метод для вычисления возраста по дате рождения
+    int year = stoi(birthDate.substr(0, 4));
+    return 2024 - year;  // Логика возраста на 2024 год
+}
 
 mutex mtx;
 
