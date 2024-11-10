@@ -1,10 +1,9 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <future>
-#include <cmath>
-#include <iomanip>
 #include <mutex>
+#include <iomanip>
+#include <stdexcept>
 
 using namespace std;
 
@@ -27,20 +26,44 @@ public:
         delete[] births;
     }
 
-    void generateDate() {
+    void generateData() {
         for (size_t i = 0; i < size; ++i) {
             births[i].motherFIO = "Mother" + to_string(i);
-            births[i].birthMother = "1980-01-01";
-            births[i].birthChild = "2023-01-01";
+            births[i].birthMother = "1980-01-01";  // предполагаемая дата рождения матери
+            births[i].birthChild = "2023-01-01";   // предполагаемая дата рождения ребенка
         }
     }
 
-    double calculateAverageAge(const string& fromDate, const string& toDate) {
+    void parseDate(const string& date, int& year, int& month, int& day) {
+        year = stoi(date.substr(0, 4));
+        month = stoi(date.substr(5, 2));
+        day = stoi(date.substr(8, 2));
+        if (month < 1 || month > 12) {
+            throw invalid_argument("Месяц должен быть от 1 до 12.");
+        }
+        if (year > 2024) {
+            throw invalid_argument("Год должен быть не больше 2024.");
+        }
+    }
+
+    bool isWithinDateRange(const string& date, const string& fromDate, const string& toDate) {
+        int year, month, day;
+        int fromYear, fromMonth, fromDay;
+        int toYear, toMonth, toDay;
+        parseDate(date, year, month, day);
+        parseDate(fromDate, fromYear, fromMonth, fromDay);
+        parseDate(toDate, toYear, toMonth, toDay);
+
+        return (year > fromYear || (year == fromYear && (month > fromMonth || (month == fromMonth && day >= fromDay)))) &&
+               (year < toYear || (year == toYear && (month < toMonth || (month == toMonth && day <= toDay))));
+    }
+
+    double calculateAverageAge(const string& fromDate, const string& toDate, size_t start, size_t end) {
         int totalAge = 0;
         int count = 0;
 
-        for (size_t i = 0; i < size; ++i) {
-            if (births[i].birthMother >= fromDate && births[i].birthMother <= toDate) {
+        for (size_t i = start; i < end; ++i) {
+            if (isWithinDateRange(births[i].birthMother, fromDate, toDate)) {
                 totalAge += getAge(births[i].birthMother);
                 count++;
             }
@@ -50,64 +73,63 @@ public:
 
 private:
     int getAge(const string& birthDate) {
-        return 2024 - stoi(birthDate.substr(0, 4));
+        int year = stoi(birthDate.substr(0, 4));
+        return 2024 - year;  // Логика возраста на 2024 год
     }
 };
 
 mutex mtx;
 
-void processSequential(BirthData& data, const string& fromDate, const string& toDate, double& result) {
-    auto start = chrono::high_resolution_clock::now();
-    result = data.calculateAverageAge(fromDate, toDate);
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double> elapsed = end - start;
-    cout << "Время обработки (последовательно): " << elapsed.count() << " секунд\n";
+void calculateAverageAgeThread(BirthData& data, const string& fromDate, const string& toDate, double& average, size_t start, size_t end) {
+    double localAverage = data.calculateAverageAge(fromDate, toDate, start, end);
+    lock_guard<mutex> lock(mtx);
+    average += localAverage;
 }
 
 void processParallel(BirthData& data, const string& fromDate, const string& toDate, double& result) {
     auto start = chrono::high_resolution_clock::now();
-    
+
     size_t mid = data.size / 2;
     double average1 = 0;
     double average2 = 0;
 
-    auto future1 = async(launch::async, [&data, &fromDate, &toDate, mid, &average1]() {
-        double localResult = data.calculateAverageAge(fromDate, toDate);
-        lock_guard<mutex> lock(mtx);
-        average1 = localResult;
-    });
+    thread thread1(calculateAverageAgeThread, ref(data), fromDate, toDate, ref(average1), 0, mid);
+    thread thread2(calculateAverageAgeThread, ref(data), fromDate, toDate, ref(average2), mid, data.size);
     
-    auto future2 = async(launch::async, [&data, &fromDate, &toDate, mid, &average2]() {
-        BirthData subArray(mid);
-        for (size_t i = 0; i < mid; ++i)
-            subArray.births[i] = data.births[i];
-        double localResult = subArray.calculateAverageAge(fromDate, toDate);
-        lock_guard<mutex> lock(mtx);
-        average2 = localResult;
-    });
-
-    future1.get();
-    future2.get();
-    result = (average1 + average2) / 2;
+    thread1.join();
+    thread2.join();
+    
+    result = (average1 + average2) / 2.0;
 
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> elapsed = end - start;
     cout << "Время обработки (параллельно): " << elapsed.count() << " секунд\n";
 }
 
+void processSequential(BirthData& data, const string& fromDate, const string& toDate, double& result) {
+    auto start = chrono::high_resolution_clock::now();
+    result = data.calculateAverageAge(fromDate, toDate, 0, data.size);
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> elapsed = end - start;
+    cout << "Время обработки (последовательно): " << elapsed.count() << " секунд\n";
+}
+
 int main() {
     const size_t dataSize = 100000;
     BirthData data(dataSize);
-    data.generateDate();
+    data.generateData();
 
-    string fromDate = "1980-01-01";
-    string toDate = "2000-01-01";
+    string fromDate, toDate;
+    cout << "Введите дату начала (ГГГГ-ММ-ДД): ";
+    cin >> fromDate;
+    cout << "Введите дату конца (ГГГГ-ММ-ДД): ";
+    cin >> toDate;
+
     double sequentialResult, parallelResult;
 
     processSequential(data, fromDate, toDate, sequentialResult);
     processParallel(data, fromDate, toDate, parallelResult);
 
-    cout << fixed << setprecision(2);
     cout << "Средний возраст (последовательно): " << sequentialResult << "\n";
     cout << "Средний возраст (параллельно): " << parallelResult << "\n";
 
