@@ -2,6 +2,7 @@
 #include <thread>
 #include <mutex>
 #include <chrono>
+#include <string>
 
 using namespace std;
 
@@ -11,8 +12,9 @@ public:
     int max_need;
     int allocated;
     int need;
+    int initial_money;
 
-    Friend(string n, int max_n, int alloc) : name(n), max_need(max_n), allocated(alloc) {
+    Friend(string n, int max_n, int alloc, int init) : name(n), max_need(max_n), allocated(alloc), initial_money(init) {
         need = max_need - allocated;
     }
 };
@@ -21,7 +23,7 @@ class Bank {
 private:
     int available;
     int friend_count;
-    Friend** friends; // Динамический массив указателей на друзей
+    Friend** friends; 
     mutex mtx;
 
 public:
@@ -30,7 +32,7 @@ public:
     }
 
     ~Bank() {
-        delete[] friends; // Освобождение памяти
+        delete[] friends; 
     }
 
     void addFriend(int index, Friend* f) {
@@ -42,12 +44,14 @@ public:
     void requestResources(Friend &f, int request) {
         lock_guard<mutex> lock(mtx);
         
+        cout << f.name << " запрашивает " << request << " долларов.\n";
+
         if (request <= available && request <= f.need) {
-            // Предполагаем, что ресурсы выделяются
             available -= request;
             f.allocated += request;
             f.need -= request;
             cout << f.name << " получил " << request << " долларов.\n";
+
             this_thread::sleep_for(chrono::seconds(1));
             checkSafeState(f);
         } else {
@@ -68,7 +72,6 @@ public:
 
         if (available + total_allocated >= total_needed) {
             cout << "Система в безопасном состоянии.\n";
-            // Вернуть ресурсы
             available += f.allocated;
             f.allocated = 0;
             cout << f.name << " вернул средства.\n";
@@ -77,31 +80,65 @@ public:
         }
     }
 
+    bool isDeadlock() {
+        for (int i = 0; i < friend_count; i++) {
+            if (friends[i]->need > available) {
+                return true; // Невозможно удовлетворить потребности хотя бы одного друга
+            }
+        }
+        return false; // Тупика нет
+    }
+
+    Friend* getFriend(int index) {
+        return (index < friend_count) ? friends[index] : nullptr;
+    }
 };
 
 int main() {
-    Bank bank(3, 3); // общий доступный ресурс и количество друзей
+    int initial_money;
+    cout << "Введите начальное количество средств в банке: ";
+    cin >> initial_money;
 
-    Friend* chandler = new Friend("Чендлер", 8, 6);
-    Friend* ross = new Friend("Росс", 13, 8);
-    Friend* joey = new Friend("Джоуи", 10, 7);
+    int friend_count;
+    cout << "Введите количество друзей: ";
+    cin >> friend_count;
 
-    bank.addFriend(0, chandler);
-    bank.addFriend(1, ross);
-    bank.addFriend(2, joey);
+    Bank bank(initial_money, friend_count);
+    
+    string name;
+    int max_need, alloc, init;
+    for (int i = 0; i < friend_count; ++i) {
+        cout << "Введите имя друга, максимальную потребность, выделенные средства и начальные деньги (через пробел): ";
+        cin >> name >> max_need >> alloc >> init;
+        Friend* friendEntity = new Friend(name, max_need, alloc, init);
+        bank.addFriend(i, friendEntity);
+    }
 
-    thread t1(&Bank::requestResources, &bank, ref(*chandler), 2); // Чендлер запрашивает 2 доллара
-    thread t2(&Bank::requestResources, &bank, ref(*ross), 5);     // Росс запрашивает 5 долларов
-    thread t3(&Bank::requestResources, &bank, ref(*joey), 3);    // Джоуи запрашивает 3 доллара
+    // Изначальное распределение средств
+    cout << "\nИзначальное распределение средств:\n";
+    for (int i = 0; i < friend_count; ++i) {
+        Friend* f = bank.getFriend(i);
+        if (f) {
+            cout << f->name << " начальные средства: " << f->initial_money << " долларов.\n";
+        }
+    }
+
+    thread t1(&Bank::requestResources, &bank, ref(*bank.getFriend(0)), 6); 
+    thread t2(&Bank::requestResources, &bank, ref(*bank.getFriend(1)), 8);     
+    thread t3(&Bank::requestResources, &bank, ref(*bank.getFriend(2)), 7);   
+
+    // Проверка на тупиковую ситуацию
+    if (bank.isDeadlock()) {
+        cout << "Система находится в тупиковой ситуации!\n";
+    }
 
     t1.join();
     t2.join();
     t3.join();
 
-    // Освобождение памяти
-    delete chandler;
-    delete ross;
-    delete joey;
+    for (int i = 0; i < friend_count; ++i) {
+        delete bank.getFriend(i);
+    }
 
     return 0;
 }
