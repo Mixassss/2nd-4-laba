@@ -3,7 +3,6 @@
 #include <chrono>
 #include <mutex>
 #include <iomanip>
-#include <stdexcept>
 
 using namespace std;
 
@@ -26,11 +25,13 @@ public:
         delete[] births;
     }
 
-    void generateData() {
-        for (size_t i = 0; i < size; ++i) {
+    void generateData(size_t numEntries) {
+        for (size_t i = 0; i < numEntries; ++i) {
             births[i].motherFIO = "Mother" + to_string(i);
-            births[i].birthMother = "1980-01-01";  // предполагаемая дата рождения матери
-            births[i].birthChild = "2023-01-01";   // предполагаемая дата рождения ребенка
+            cout << "Введите дату рождения матери для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
+            cin >> births[i].birthMother;
+            cout << "Введите дату рождения ребенка для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
+            cin >> births[i].birthChild;
         }
     }
 
@@ -115,9 +116,12 @@ void processSequential(BirthData& data, const string& fromDate, const string& to
 }
 
 int main() {
-    const size_t dataSize = 100000;
+    size_t dataSize;
+    cout << "Введите количество записей о родах: ";
+    cin >> dataSize;
+    
     BirthData data(dataSize);
-    data.generateData();
+    data.generateData(dataSize);
 
     string fromDate, toDate;
     cout << "Введите дату начала (ГГГГ-ММ-ДД): ";
