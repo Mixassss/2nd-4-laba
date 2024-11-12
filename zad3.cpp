@@ -2,144 +2,79 @@
 #include <thread>
 #include <mutex>
 #include <chrono>
-#include <string>
 
 using namespace std;
 
-class Friend {
-public:
-    string name;
-    int max_need;
-    int allocated;
-    int need;
-
-    Friend(string n, int max_n, int alloc) : name(n), max_need(max_n), allocated(alloc) {
-        need = max_need - allocated;
-    }
-};
-
-class Bank {
+class WriterAndReader {
 private:
-    int available;
-    int friend_count;
-    Friend** friends; 
-    mutex mtx;
+    mutex no_reads;
+    mutex no_writes;
+    mutex mut_counter;
+    int nreaders = 0;
 
 public:
-    Bank(int avail, int count) : available(avail), friend_count(count) {
-        friends = new Friend*[friend_count];
-    }
-
-    ~Bank() {
-        delete[] friends; 
-    }
-
-    void addFriend(int index, Friend* f) {
-        if (index < friend_count) {
-            friends[index] = f;
-        }
-    }
-
-    void requestResources(int index, int request) {
-        lock_guard<mutex> lock(mtx);
-        
-        Friend& f = *friends[index];
-        cout << f.name << " запрашивает " << request << " рублей.\n";
-
-        if (request <= available && request <= f.need) {
-            available -= request;
-            f.allocated += request;
-            f.need -= request;
-            cout << f.name << " получил " << request << " рублей.\n";
-            checkSafeState(f);
-        } else {
-            cout << f.name << " не может получить " << request << " рублей. Недостаточно ресурсов.\n";
-        }
-    }
-
-    void checkSafeState(Friend &f) {
-        // Проверка на безопасное состояние
-        int total_allocated = 0;
-        int total_needed = 0;
-
-        for (int i = 0; i < friend_count; i++) {
-            total_allocated += friends[i]->allocated;
-            total_needed += friends[i]->need;
-        }
-
-        if (available + total_allocated >= total_needed) {
-            cout << "Система в безопасном состоянии.\n";
-            available += f.allocated;
-            f.allocated = 0;
-            cout << f.name << " вернул средства.\n";
-        } else {
-            cout << "Система не в безопасном состоянии! Возможен тупик.\n";
-        }
-    }
-
-    bool isDeadlock() {
-        for (int i = 0; i < friend_count; i++) {
-            if (friends[i]->need > available) {
-                return true; // Невозможно удовлетворить потребности хотя бы одного друга
+    void read(int id) {
+        while (true) {
+            no_writes.lock(); // Блокируем доступ писателям
+            {
+                lock_guard<mutex> lock(mut_counter);
+                nreaders++;
+                if (nreaders == 1) {
+                    no_reads.lock(); // Первый читатель блокирует доступ писателям
+                }
             }
+            no_writes.unlock(); // Освобождаем блокировку для писателей
+
+            cout << "Читатель " << id << " занят чтением" << endl;
+            this_thread::sleep_for(chrono::milliseconds(100));
+
+            {
+                lock_guard<mutex> lock(mut_counter); // Завершаем чтение
+                nreaders--;
+                if (nreaders == 0) {
+                    no_reads.unlock(); // Последний читатель освобождает писателям
+                }
+            }
+            this_thread::sleep_for(chrono::milliseconds(50));
         }
-        return false; // Тупика нет
     }
 
-    Friend* getFriend(int index) {
-        return (index < friend_count) ? friends[index] : nullptr;
+    void write(int id) {
+        while (true) {
+            no_writes.lock(); // Блокируем других писателей
+            no_reads.lock(); // Блокируем доступ читателям
+
+            cout << "Писатель " << id << " пишет" << endl;
+            this_thread::sleep_for(chrono::milliseconds(100));
+
+            no_reads.unlock();
+            no_writes.unlock();
+        }
     }
 };
 
 int main() {
-    int initial_money;
-    cout << "Введите начальное количество средств в банке: ";
-    cin >> initial_money;
+    WriterAndReader raw;
 
-    int friend_count = 3;
-    Bank bank(initial_money, friend_count);
+    thread readers[5];
+    thread writers[2];
 
-    // Инициализация друзей с их максимальными потребностями и выделенными средствами
-    bank.addFriend(0, new Friend("Миша", 8, 6));
-    bank.addFriend(1, new Friend("Вадим", 13, 8));
-    bank.addFriend(2, new Friend("Влад", 10, 7));
-
-    // Изначальное распределение средств
-    cout << "\nИзначальное распределение средств:\n";
-    for (int i = 0; i < friend_count; ++i) {
-        Friend* f = bank.getFriend(i);
-        if (f) {
-            cout << f->name << " начальные средства: " << f->allocated << " рублей.\n";
-        }
+    // Создание потоков читателей
+    for (int i = 0; i < 5; i++) {
+        readers[i] = thread(&WriterAndReader::read, &raw, i + 1);
     }
 
-    // Проверить общую сумму выделенных средств
-    int total_allocated = 0;
-    for (int i = 0; i < friend_count; ++i) {
-        total_allocated += bank.getFriend(i)->allocated;
-    }
-    
-    if (total_allocated > initial_money) {
-        cout << "Ошибка: выделенные средства превышают начальные средства в банке!" << endl;
-        return -1; // Завершить программу с ошибкой
+    // Создание потоков писателей
+    for (int i = 0; i < 2; i++) {
+        writers[i] = thread(&WriterAndReader::write, &raw, i + 1);
     }
 
-    // Запрос ресурсов
-    int request;
-    for (int i = 0; i < friend_count; i++) {
-        cout << "Введите запрашиваемую сумму для " << bank.getFriend(i)->name << ": ";
-        cin >> request;
-        thread t(&Bank::requestResources, &bank, i, request);
-        t.join();
+    // Ждать завершения потоков
+    for (int i = 0; i < 5; i++) {
+        readers[i].join();
     }
-
-    // Проверка на тупиковую ситуацию
-    if (bank.isDeadlock()) {
-        cout << "Система находится в тупиковой ситуации!\n";
-    }
-
-    for (int i = 0; i < friend_count; ++i) {
-        delete bank.getFriend(i);
+    for (int i = 0; i < 2; i++) {
+        writers[i].join();
     }
 
     return 0;
