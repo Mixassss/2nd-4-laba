@@ -1,3 +1,6 @@
+#ifndef RandW_h
+#define RandW_h
+
 #include <iostream>
 #include <thread>
 #include <mutex>
@@ -18,3 +21,5 @@ public:
     void read(int id, int read_limit);
     void write(int id, int write_limit);
 };
+
+#endif // RANDW_H

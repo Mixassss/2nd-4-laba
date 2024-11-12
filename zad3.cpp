@@ -1,4 +1,4 @@
-#include "R&W.h"
+#include "RandW.h"
 
 WriterAndReader::WriterAndReader() : nreaders(0) {}
 
