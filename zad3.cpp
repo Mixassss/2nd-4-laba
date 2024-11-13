@@ -1,25 +1,21 @@
 #include "RandW.h"
 
-WriterAndReader::WriterAndReader() : nreaders(0), writer_active(false) {}
+WriterAndReader::WriterAndReader() : nreaders(0) {}
 
 void WriterAndReader::read(int id, int read_limit) {
     for (int i = 0; i < read_limit; ++i) {
-        {
-            lock_guard<mutex> lock(mut_counter);
-            if (nreaders == 0) {
-                no_writes.lock(); // Первый читатель блокирует доступ писателям
-            }
-            nreaders++;
-        }
-
+        read_priority();
+        
         cout << "Читатель " << id << " занят чтением" << endl;
         this_thread::sleep_for(chrono::milliseconds(100));
 
+        // Завершение чтения
         {
             lock_guard<mutex> lock(mut_counter);
             nreaders--;
             if (nreaders == 0) {
-                no_writes.unlock(); // Последний читатель освобождает доступ писателям
+                rw_mutex.unlock(); // Последний читатель освобождает доступ писателям
+                cout << "Последний читатель " << id << " завершил чтение и освободил доступ писателям." << endl;
             }
         }
         this_thread::sleep_for(chrono::milliseconds(50));
@@ -28,59 +24,55 @@ void WriterAndReader::read(int id, int read_limit) {
 
 void WriterAndReader::write(int id, int write_limit) {
     for (int i = 0; i < write_limit; ++i) {
-        no_writes.lock();  // Блокируем доступ для других писателей и читателей
-        writer_active = true; // Устанавливаем флаг активности писателя
-
-        cout << "Писатель " << id << " пишет" << endl;
+        write_priority();
+        
+        cout << "Писатель " << id << " получил доступ и пишет." << endl;
         this_thread::sleep_for(chrono::milliseconds(100));
-
-        writer_active = false; // Сбрасываем флаг активности писателя
-        no_writes.unlock(); // Освобождаем блокировку для других писателей и читателей            
+        
+        // Освобождаем блокировку
+        rw_mutex.unlock();
+        cout << "Писатель " << id << " завершил запись и освободил доступ." << endl;
+        
         this_thread::sleep_for(chrono::milliseconds(50));
     }
 }
 
-void WriterAndReader::set_priority(bool readerPriority) {
-    // Установка приоритета
-    if (readerPriority) {
-        cout << "Приоритет читателя установлен." << endl;
-    } else {
-        cout << "Приоритет писателя установлен." << endl;
+void WriterAndReader::read_priority() {
+    lock_guard<mutex> lock(mut_counter);
+    nreaders++;
+    if (nreaders == 1) {
+        rw_mutex.lock(); // Первый читатель блокирует доступ писателям
+        cout << "Первый читатель начал чтение и заблокировал доступ для писателей." << endl;
     }
+}
+
+void WriterAndReader::write_priority() {
+    rw_mutex.lock(); // Блокируем доступ всем читателям и писателям
+    cout << "Писатель заблокировал доступ для всех читателей и писателей." << endl;
 }
 
 int main() {
     WriterAndReader raw;
 
-    thread readers[3];
-    thread writers[3];
-    
+    thread readers[2];
+    thread writers[2];
+
     int read_limit = 3;  // Количество чтений для каждого читателя
-    int write_limit = 3; // Количество записей для каждого писателя
+    int write_limit = 2; // Количество записей для каждого писателя
 
-    // Запрос приоритета у пользователя
-    char choice;
-    cout << "Введите 'r' для приоритета читателей или 'w' для приоритета писателей: ";
-    cin >> choice;
-    
-    if (choice == 'r') {
-        raw.set_priority(true); // Приоритет читателя
-    } else {
-        raw.set_priority(false); // Приоритет писателя
-    }
-
-    for (int i = 0; i < 3; i++) { // Создание потоков читателей
+    for (int i = 0; i < 2; i++) { // Создание потоков читателей
         readers[i] = thread(&WriterAndReader::read, &raw, i + 1, read_limit);
     }
 
-    for (int i = 0; i < 3; i++) { // Создание потоков писателей
+    for (int i = 0; i < 2; i++) { // Создание потоков писателей
         writers[i] = thread(&WriterAndReader::write, &raw, i + 1, write_limit);
     }
 
-    for (int i = 0; i < 3; i++) { // Ждать завершения потоков
+    for (int i = 0; i < 2; i++) { // Ждать завершения потоков
         readers[i].join();
     }
-    for (int i = 0; i < 3; i++) {
+
+    for (int i = 0; i < 2; i++) { // Ждать завершения потоков писателей
         writers[i].join();
     }
 
