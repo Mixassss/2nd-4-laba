@@ -13,41 +13,41 @@ using namespace std;
 const int thread_count = 5; // Кол-во потоков
 const int char_count = 1; // Кол-во символов, которое генеритруется потоком
 
-barrier my_barrier(thread_count);
-mutex slim_mtx;
-counting_semaphore<1> sem(1);
+barrier my_barrier(thread_count); // Определяем барьер для синхронизации потоков
+mutex slim_mtx; // Мьютекс для обеспечения взаимного исключения
+counting_semaphore<1> sem(1); // Семофор с единичным счетчиком
 
-class StopWatch {
-    chrono::time_point<chrono::steady_clock> start_time;
+class StopWatch { // Класс для измерения времени выполнения
+    chrono::time_point<chrono::steady_clock> start_time; 
 public:
     void start() {
-        start_time = chrono::steady_clock::now();
+        start_time = chrono::steady_clock::now(); // Запускаем таймер
     }
 
     double elapsed() {
-        auto end_time = chrono::steady_clock::now();
-        chrono::duration<double> duration = end_time - start_time;
-        return duration.count();
+        auto end_time = chrono::steady_clock::now(); // Получаем текущее время
+        chrono::duration<double> duration = end_time - start_time; // Вычисляем продолжительность
+        return duration.count(); // Возвращаем продолжительность в секундах
     }
 };
 
 class SemaphoreSlim {
-    atomic<int> count;
-    mutex mtx;
-    condition_variable cv;
+    atomic<int> count; // Подсчет доступных ресурсов
+    mutex mtx; // Мьютекс для защиты данных
+    condition_variable cv; // Условная переменная для сигнализации
 public:
     
     SemaphoreSlim(int initial) : count(initial) {}
     
-    void acquireSlim() {
+    void acquireSlim() { // Функция для захвата ресурса
         unique_lock<mutex> lock(slim_mtx);
         while (count <= 0) {
-            cv.wait(lock);
+            cv.wait(lock); // Ожидаем освобождения ресурса
         }
         --count; // Уменьшаем счетчик
     }
 
-    void realeseSlim() {
+    void realeseSlim() {  // Функция для освобождения ресурса
         unique_lock<mutex> lock(slim_mtx);
         ++count; // Уменьшаем счетчик
         cv.notify_one(); // Уведомляем один поток
@@ -72,17 +72,17 @@ Monitor monitor;
 class RandomCharGenerator {
     mutex mtx;
     condition_variable slim_cv;
-    atomic_flag spinlock = ATOMIC_FLAG_INIT;
+    atomic_flag spinlock = ATOMIC_FLAG_INIT; // Spinlock для реализации взаимного исключения
     
 public:
-    void generateRandomCharsMutex(int thread_id) {
+    void generateRandomCharsMutex(int thread_id) { // Генерация случайных символов с использованием мьютекса
         random_device rd;
         mt19937 gen(rd());
         uniform_int_distribution<> dis(32, 126);
 
         for (int i = 0; i < char_count; ++i) {
             char random_char = dis(gen);
-            lock_guard<mutex> lock(mtx);
+            lock_guard<mutex> lock(mtx); // Блокировка мьютекса
             cout << "Mutex thread " << thread_id << ": " << random_char << endl;
         }
     }
@@ -93,10 +93,10 @@ public:
         uniform_int_distribution<> dis(32, 126);
 
         for (int i = 0; i < char_count; ++i) {
-            sem.acquire();
+            sem.acquire(); // Захват семафора
             char random_char = dis(gen);
             cout << "Semaphore thread " << thread_id << ": " << random_char << endl;
-            sem.release();
+            sem.release(); // Освобождение семафора
         }
     }
 
@@ -124,7 +124,7 @@ public:
                 lock_guard<mutex> lock(mtx);
                 cout << "Barrier thread " << thread_id << ": " << random_char << endl;
             }
-            my_barrier.arrive_and_wait();
+            my_barrier.arrive_and_wait(); // Ожидание других потоков
         }
     }
 
