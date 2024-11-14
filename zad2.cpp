@@ -58,7 +58,7 @@ public:
                 }
             }
 
-            // Генерация фио матери
+            // Генерация ФИО матери
             char motherFIO = 'A' + (rand() % 26); // Генерируем случайную букву для упрощенной ФИО
             record.motherFIO = string(1, motherFIO);
 
@@ -89,9 +89,7 @@ public:
         lock_guard<mutex> lock(mx);
         for (const auto& record : records) {
             if (checkDate(record.babyBirthDate, startDate, endDate)) {
-                cout << "ФИО: " << record.motherFIO 
-                     << " | Дата матери: " << record.womanBirthDate 
-                     << " | Дата ребенка: " << record.babyBirthDate << endl;
+                cout << "ФИО: " << record.motherFIO << " | Дата матери: " << record.womanBirthDate << " | Дата ребенка: " << record.babyBirthDate << endl;
             }
         }
     }
@@ -165,10 +163,10 @@ int main() {
 
     Maternity maternity;
 
-    cout << "Выберите действие: 1-добавить записи, 2-вычислить средний возраст, 3-вывести записи в диапазоне, 4-выход" << endl;
+    cout << "Выберите действие: 1 - добавить записи, 2 - вычислить средний возраст" << endl;
     while (true) {
         string choice;
-        cout << "Ваш выбор: ";
+        cout << "Вы выбрали: ";
         cin >> choice;
 
         if (choice == "1") {
@@ -209,7 +207,7 @@ int main() {
 
             {
                 Timer t; // Добавим измеритель времени
-                cout << endl << "Многопоточная обработка: " << endl;
+                cout << "Многопоточная обработка: " << endl;
                 for (int i = 0; i < countThreads; ++i) {
                     int start = i * chunkSize;
                     int end = (i == countThreads - 1) ? size : start + chunkSize; // Обработка последнего потока
@@ -235,15 +233,9 @@ int main() {
 
                 // Вывод записей в диапазоне
                 maternity.printRecordsInRange(startDate, endDate);
+                break;
             }
-
-        } else if (choice == "3") {
-            cout << "Выход..." << endl;
-            break;
-        } else {
-            cout << "Ошибка, нет такого действия!" << endl;
         }
     }
-
     return 0;
 }
