@@ -1,132 +1,207 @@
-#include "zad2.h"
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <ctime>
+#include <thread>
+#include <mutex>
+#include <chrono>
 
-BirthData::BirthData(size_t size) : size(size) { // Конструктор, выделяющий память для массива родов
-    births = new Birth[size];
-}
+using namespace std;
 
-BirthData::~BirthData() { // Деструктор, освобождающий выделенную память
-    delete[] births;
-}
+class MaternityRecord {
+public:
+    string womanName;      // ФИО женщины
+    string womanBirthDate; // Дата рождения женщины (dd-mm-yyyy)
+    string babyBirthDate;  // Дата рождения ребенка (dd-mm-yyyy)
+};
 
-// Метод для генерации данных о родах
-void BirthData::generateData(size_t numEntries) {
-    for (size_t i = 0; i < numEntries; ++i) {
-        births[i].motherFIO = "Mother" + to_string(i);
-        cout << "Введите дату рождения матери для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
-        cin >> births[i].birthMother;
-        cout << "Введите дату рождения ребенка для " << births[i].motherFIO << " (ГГГГ-ММ-ДД): ";
-        cin >> births[i].birthChild;
-    }
-}
+class MaternityData {
+public:
+    void addRecord() {
+        int n;
+        cout << "Введите количество записей о родах: ";
+        cin >> n;
 
-// Метод для разбора даты и извлечения года, месяца и дня
-void BirthData::parseDate(const string& date, int& year, int& month, int& day) {
-    year = stoi(date.substr(0, 4)); // Извлечение года
-    month = stoi(date.substr(5, 2)); // Извлечение месяца
-    day = stoi(date.substr(8, 2)); // Извлечение дня
-    if (month < 1 || month > 12) {
-        throw invalid_argument("Месяц должен быть от 1 до 12.");
-    }
-    if (year > 2024) {
-        throw invalid_argument("Год должен быть не больше 2024.");
-    }
-}
-
-// Метод проверки, находится ли дата в заданном диапазоне
-bool BirthData::DateRange(const string& date, const string& fromDate, const string& toDate) {
-    int year, month, day;
-    int fromYear, fromMonth, fromDay;
-    int toYear, toMonth, toDay;
-    parseDate(date, year, month, day);
-    parseDate(fromDate, fromYear, fromMonth, fromDay);
-    parseDate(toDate, toYear, toMonth, toDay);
-
-    return (year > fromYear || (year == fromYear && 
-            (month > fromMonth || (month == fromMonth && day >= fromDay)))) &&
-            (year < toYear || (year == toYear && 
-            (month < toMonth || (month == toMonth && day <= toDay))));
-}
-
-// Метод вычисления среднего возраста матерей в заданном диапазоне дат
-double BirthData::calculateAverageAge(const string& fromDate, const string& toDate, size_t start, size_t end) {
-    int totalAge = 0; // Сумма возрастов
-    int count = 0; // Счетчик подходящих записей
-
-    for (size_t i = start; i < end; ++i) { // Если дата рождения матери попадает в диапазон
-        if (DateRange(births[i].birthMother, fromDate, toDate)) {
-            totalAge += getAge(births[i].birthMother); // Добавляем возраст
-            count++;
+        for (int i = 0; i < n; ++i) {
+            MaternityRecord record;
+            record.womanBirthDate = generateRandomDate(1975, 2000); // Генерация даты рождения женщины
+            record.babyBirthDate = generateRandomDate(2005, 2024);   // Генерация даты рождения ребенка
+            records.push_back(record);
         }
     }
-    return (count > 0) ? static_cast<double>(totalAge) / count : 0.0; // Возврат среднего возраста
-}
 
-int BirthData::getAge(const string& birthDate) { // Метод для вычисления возраста по дате рождения
-    int year = stoi(birthDate.substr(0, 4));
-    return 2024 - year;  // Логика возраста на 2024 год
-}
+    double calculateAverageAge(const string& startDate, const string& endDate) {
+        double totalAge = 0;
+        int count = 0;
+        tm startTm = stringToDate(startDate);
+        tm endTm = stringToDate(endDate);
 
-mutex mtx;
+        for (const auto& record : records) {
+            tm babyTm = stringToDate(record.babyBirthDate);
+            if (isDateInRange(babyTm, startTm, endTm)) {
+                int age = calculateYearDifference(record.womanBirthDate);
+                totalAge += age;
+                count++;
+            }
+        }
+        return (count > 0) ? totalAge / count : 0;
+    }
 
-// Функция для расчета среднего возраста в отдельном потоке
-void calculateAverageAgeThread(BirthData& data, const string& fromDate, const string& toDate, double& average, size_t start, size_t end) {
-    double localAverage = data.calculateAverageAge(fromDate, toDate, start, end);
-    lock_guard<mutex> lock(mtx); // Защита от конкурентного доступа
-    average += localAverage;  // Обновляем общий средний возраст
-}
+    void processRecords(int startIdx, int endIdx, double &averageAge, const string& startDate, const string& endDate) {
+        double ageSum = 0;
+        int count = 0;
 
-// Функция для обработки данных в параллельных потоках
-void processParallel(BirthData& data, const string& fromDate, const string& toDate, double& result) {
-    auto start = chrono::high_resolution_clock::now();
+        for (int i = startIdx; i < endIdx; i++) {
+            int age = calculateYearDifference(records[i].womanBirthDate);
+            tm babyTm = stringToDate(records[i].babyBirthDate);
+            if (isDateInRange(babyTm, stringToDate(startDate), stringToDate(endDate))) {
+                ageSum += age;
+                count++;
+            }
+        }
 
-    size_t mid = data.size / 2; // Делим массив пополам
-    double average1 = 0;
-    double average2 = 0;
+        lock_guard<mutex> guard(mx);
+        if (count > 0) {
+            averageAge += ageSum;
+            averageCount += count;
+        }
+    }
 
-    // Создаем два потока для расчета среднего возраста
-    thread t1(calculateAverageAgeThread, ref(data), fromDate, toDate, ref(average1), 0, mid);
-    thread t2(calculateAverageAgeThread, ref(data), fromDate, toDate, ref(average2), mid, data.size);
-    
-    t1.join(); // Ожидание завершения первого потока
-    t2.join(); // Ожидание завершения второго потока
-     
-    result = (average1 + average2) / 2.0; // Общий результат как среднее значение двух потоков
+    vector<MaternityRecord> records;
+private:
+    mutex mx;
+    int averageCount = 0;
 
-    auto end = chrono::high_resolution_clock::now(); // Замер времени окончания
-    chrono::duration<double> elapsed = end - start; // Подсчет времени выполнения
-    cout << "Время обработки (параллельно): " << elapsed.count() << " секунд\n";
-}
+    string generateRandomDate(int startYear, int endYear) {
+        int day, month, year;
+        while (true) {
+            day = rand() % 31 + 1; // 1-31
+            month = rand() % 12 + 1; // 1-12
+            year = rand() % (endYear - startYear + 1) + startYear; // Ограниченный диапазон годов
 
-// Функция для обработки данных последовательно
-void processSequential(BirthData& data, const string& fromDate, const string& toDate, double& result) {
-    auto start = chrono::high_resolution_clock::now(); // Начало замера времени
-    result = data.calculateAverageAge(fromDate, toDate, 0, data.size); // Последовательный расчет
-    auto end = chrono::high_resolution_clock::now(); // Конец замера времени
-    chrono::duration<double> elapsed = end - start;
-    cout << "Время обработки (последовательно): " << elapsed.count() << " секунд\n";
-}
+            if (checkDate(day, month, year)) {
+                string date = to_string(day) + '-' + to_string(month) + '-' + to_string(year);
+                return date;
+            }
+        }
+    }
+
+    int calculateYearDifference(const string& birthDate) {
+        int day, month, year;
+        stringstream ss(birthDate);
+        string token;
+
+        getline(ss, token, '-');
+        day = stoi(token);
+        getline(ss, token, '-');
+        month = stoi(token);
+        getline(ss, token, '-');
+        year = stoi(token);
+
+        time_t now = time(0);
+        tm *ltm = localtime(&now);
+        int currentYear = ltm->tm_year + 1900;
+        return currentYear - year;
+    }
+
+    tm stringToDate(const string& date) {
+        tm tm = {};
+        stringstream ss(date);
+        string token;
+
+        getline(ss, token, '-');
+        tm.tm_mday = stoi(token);
+        getline(ss, token, '-');
+        tm.tm_mon = stoi(token) - 1; // Месяцы начинаются с 0
+        getline(ss, token, '-');
+        tm.tm_year = stoi(token) - 1900; // Год с 1900
+
+        return tm;
+    }
+
+    bool isDateInRange(const tm& date, const tm& start, const tm& end) {
+        time_t dateTime = mktime(const_cast<tm*>(&date));
+        time_t startTime = mktime(const_cast<tm*>(&start));
+        time_t endTime = mktime(const_cast<tm*>(&end));
+
+        return (dateTime >= startTime && dateTime <= endTime);
+    }
+
+    bool checkDate(int day, int month, int year) {
+        if (month < 1 || month > 12 || day < 1 || day > 31)
+            return false;
+
+        if ((month == 4 || month == 6 || month == 9 || month == 11) && day == 31)
+            return false; // Апрель, Июнь, Сентябрь, Ноябрь
+
+        if (month == 2) {
+            bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+            if (day > (leap ? 29 : 28))
+                return false; // Февраль
+        }
+        return true;
+    }
+};
 
 int main() {
-    size_t dataSize;
-    cout << "Введите количество записей о родах: ";
-    cin >> dataSize;
-    
-    BirthData data(dataSize); // Создаем объект класса BirthData
-    data.generateData(dataSize); // Генерируем данные о родах
+    srand(static_cast<unsigned int>(time(0)));
+    MaternityData data;
 
-    string fromDate, toDate;
-    cout << "Введите дату начала (ГГГГ-ММ-ДД): ";
-    cin >> fromDate;
-    cout << "Введите дату конца (ГГГГ-ММ-ДД): ";
-    cin >> toDate;
+    cout << "Выберите действие: 1-добавить записи, 2-вычислить средний возраст, 3-выход" << endl;
+    while (true) {
+        string choice;
+        cout << "Ваш выбор: ";
+        cin >> choice;
 
-    double sequentialResult, parallelResult;
+        if (choice == "1") {
+            data.addRecord();
+        } else if (choice == "2") {
+            string startDate, endDate;
+            cout << "Введите начальную дату (dd-mm-yyyy): ";
+            cin >> startDate;
+            cout << "Введите конечную дату (dd-mm-yyyy): ";
+            cin >> endDate;
 
-    processSequential(data, fromDate, toDate, sequentialResult);
-    processParallel(data, fromDate, toDate, parallelResult);
+            cout << "Однопоточная обработка: " << endl;
+            auto start = chrono::high_resolution_clock::now();
+            double averageAgeSingle = data.calculateAverageAge(startDate, endDate);
+            auto end = chrono::high_resolution_clock::now();
+            chrono::duration<double> elapsedSingle = end - start;
+            cout << "Средний возраст: " << averageAgeSingle << endl;
+            cout << "Время однопоточной обработки: " << elapsedSingle.count() << " секунд" << endl;
 
-    cout << "Средний возраст (последовательно): " << sequentialResult << "\n";
-    cout << "Средний возраст (параллельно): " << parallelResult << "\n";
+            int countThreads;
+            cout << "Введите количество потоков: ";
+            cin >> countThreads;
+
+            int size = data.records.size();
+            vector<thread> threads(countThreads);
+            double totalAge = 0;
+            int totalCount = 0;
+            int chunkSize = size / countThreads;
+
+            auto startMulti = chrono::high_resolution_clock::now();
+            for (int i = 0; i < countThreads; ++i) {
+                int startIdx = i * chunkSize;
+                int endIdx = (i == countThreads - 1) ? size : startIdx + chunkSize;
+                threads[i] = thread(&MaternityData::processRecords, &data, startIdx, endIdx, ref(totalAge), startDate, endDate);
+            }
+            for (auto& t : threads) {
+                t.join();
+            }
+            double averageAgeMulti = (totalCount > 0) ? totalAge / totalCount : 0;
+            auto endMulti = chrono::high_resolution_clock::now();
+            chrono::duration<double> elapsedMulti = endMulti - startMulti;
+
+            cout << "Средний возраст в многопоточном режиме: " << averageAgeMulti << endl;
+            cout << "Время многопоточной обработки: " << elapsedMulti.count() << " секунд" << endl;
+        } else if (choice == "3") {
+            cout << "Выход..." << endl;
+            break;
+        } else {
+            cout << "Ошибка, нет такого действия!" << endl;
+        }
+    }
 
     return 0;
 }
