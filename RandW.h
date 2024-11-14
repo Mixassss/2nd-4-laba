@@ -4,28 +4,27 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
-#include <chrono>
-#include <atomic>
 #include <condition_variable>
+#include <chrono>
+#include <vector>
 
 using namespace std;
 
 class WriterAndReader {
 private:
-    mutex mut_counter;  // Мьютекс для защиты счетчиков
-    condition_variable cv; // Условие для синхронизации
-    mutex rw_mutex;    // Мьютекс для управления доступом читателей и писателей
-    int nreaders;    // Количество читателей
-    int nwriters;    // Количество писателей
-    bool writer_active;  // Флаг, указывающий на активность писателя
+    mutex mx;
+    condition_variable cv;
+    int writers; // кол-во активных писателей
+    int readers; // кол-во активный читателей
+    bool priority; // выбор приоритета
 public:
-    WriterAndReader();
+    WriterAndReader(bool check);
 
-    void read(int id, int read_limit);
-    void write(int id, int write_limit);
-    
-    void read_priority();  // Приоритет читателя
-    void write_priority(); // Приоритет писателя
+    void startWriting();
+    void stopWriting();
+    void startReading();
+    void stopReading();
+    void replacePriority(bool change);
 };
 
 #endif // RANDW_H
