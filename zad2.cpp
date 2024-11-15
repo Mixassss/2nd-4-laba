@@ -11,17 +11,17 @@ using namespace std;
 class Timer {
 public:
     Timer() {
-        start = std::chrono::high_resolution_clock::now();
+        start = chrono::high_resolution_clock::now();
     }
 
     ~Timer() {
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration = end - start;
-        std::cout << "Время выполнения: " << duration.count() << " секунд" << std::endl;
+        auto end = chrono::high_resolution_clock::now();
+        chrono::duration<double> duration = end - start;
+        cout << "Время выполнения: " << duration.count() << " секунд" << endl;
     }
 
 private:
-    std::chrono::high_resolution_clock::time_point start;
+    chrono::high_resolution_clock::time_point start;
 };
 
 class Maternity {
@@ -37,8 +37,8 @@ public:
             // Генерация даты рождения женщины
             while (true) {
                 int day = 1 + rand() % 31;
-                int month = 1 + rand() % 12; // Исправлено на 12 месяцев
-                int year = 1975 + rand() % 25; // Исправлено для корректного диапазона
+                int month = 1 + rand() % 12; 
+                int year = 1975 + rand() % 25;
                 string dateM = to_string(day) + '-' + to_string(month) + '-' + to_string(year);
                 if (checkDate(dateM)) {
                     record.womanBirthDate = dateM;
@@ -49,8 +49,8 @@ public:
             // Генерация даты рождения ребенка
             while (true) {
                 int day = 1 + rand() % 31;
-                int month = 1 + rand() % 12; // Исправлено на 12 месяцев
-                int year = 2010 + rand() % 15; // Исправлено для корректного диапазона
+                int month = 1 + rand() % 12;
+                int year = 2007 + rand() % 18;
                 string dateC = to_string(day) + '-' + to_string(month) + '-' + to_string(year);
                 if (checkDate(dateC)) {
                     record.babyBirthDate = dateC;
@@ -59,7 +59,7 @@ public:
             }
 
             // Генерация ФИО матери
-            char motherFIO = 'A' + (rand() % 26); // Генерируем случайную букву для упрощенной ФИО
+            char motherFIO = 'A' + (rand() % 26); // Генерируем случайную букву для ФИО
             record.motherFIO = string(1, motherFIO);
 
             records.push_back(record);
