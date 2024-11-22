@@ -47,9 +47,9 @@ public:
         --count; // Уменьшаем счетчик
     }
 
-    void realeseSlim() {  // Функция для освобождения ресурса
-        unique_lock<mutex> lock(slim_mtx);
-        ++count; // Уменьшаем счетчик
+    void releaseSlim() {  // Функция для освобождения ресурса
+        unique_lock<mutex> lock(mtx);
+        ++count; // Увеличиваем счетчик
         cv.notify_one(); // Уведомляем один поток
     }
 };
@@ -82,8 +82,9 @@ public:
 
         for (int i = 0; i < char_count; ++i) {
             char random_char = dis(gen);
-            lock_guard<mutex> lock(mtx); // Блокировка мьютекса
+            mtx.lock(); // Блокировка мьютекса
             cout << "Mutex thread " << thread_id << ": " << random_char << endl;
+            mtx.unlock();
         }
     }
 
@@ -109,7 +110,7 @@ public:
             sem_slim.acquireSlim();
             char random_char = dis(gen);
             cout << "SemaphoreSlim thread " << thread_id << ": " << random_char << endl;
-            sem_slim.realeseSlim();
+            sem_slim.releaseSlim(); // Исправлено на правильное имя метода
         }
     }
 
@@ -159,7 +160,7 @@ public:
     void generateRandomCharsMonitor(int thread_id) {
         random_device rd;
         mt19937 gen(rd());
-        uniform_int_distribution<> dis(32,126); // Генерация случайных символов из ASII таблицы
+        uniform_int_distribution<> dis(32, 126); // Генерация случайных символов из ASII таблицы
 
         for (int i = 0; i < char_count; ++i) {
             monitor.enter();
