@@ -55,7 +55,10 @@ public:
 };
 
 class Monitor {
+private:
     mutex m;
+    condition_variable cv;
+
 public:
     
     void enter() {
@@ -64,6 +67,16 @@ public:
 
     void exit() {
         m.unlock();
+    }
+
+    void wait() {
+        unique_lock<mutex> lock(m);
+        cv.wait(lock); // Ожидание сигнала
+    }
+
+    void signal() {
+        unique_lock<mutex> lock(m);
+        cv.notify_one(); // Разбудить один поток
     }
 };
 SemaphoreSlim sem_slim(1);
@@ -166,8 +179,9 @@ public:
             monitor.enter();
             char random_char = dis(gen);
             cout << "Monitor thread " << thread_id << ": " << random_char << endl;
-            monitor.exit();
         }
+        spinlock.clear(memory_order_acquire);
+        monitor.exit();
     }
 };
 
